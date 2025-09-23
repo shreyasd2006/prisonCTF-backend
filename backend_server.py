@@ -38,8 +38,8 @@ class Submission(db.Model):
     problem_num = db.Column(db.Integer, nullable=False)
     language = db.Column(db.String(20), nullable=False)
     submitted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    score = db.Column(db.Integer, nullable=False, default=0) # New: Number of test cases passed
-    time_taken = db.Column(db.Float, nullable=False, default=0.0) # New: Execution time
+    score = db.Column(db.Integer, nullable=False, default=0)
+    time_taken = db.Column(db.Float, nullable=False, default=0.0)
     
     user = db.relationship('User', backref=db.backref('submissions', lazy=True))
 
@@ -74,7 +74,6 @@ def run_code_with_subprocess(user_code, language, problem_num):
             class_name = _get_java_class_name(user_code) or 'solution'
             if not class_name: return {'success': False, 'score': 0, 'message': 'Could not determine public class name in Java code.'}
             
-            # Rename solution.java to the actual class name to avoid compilation errors
             actual_solution_path = os.path.join(temp_dir, f'{class_name}.java')
             os.rename(solution_filename, actual_solution_path)
 
@@ -147,7 +146,6 @@ def validate_solution():
 
 @app.route('/leaderboard', methods=['GET'])
 def leaderboard():
-    # Sum scores and time for each user, then rank by score DESC, then time ASC
     leaderboard_query = db.session.query(
         User.username,
         db.func.sum(Submission.score).label('total_score'),
@@ -162,7 +160,7 @@ def leaderboard():
 
 @app.route('/user_progress/<int:user_id>', methods=['GET'])
 def user_progress(user_id):
-    solved_problems = db.session.query(Submission.problem_num).filter_by(user_id=user_id, success=True).all()
+    solved_problems = db.session.query(Submission.problem_num).filter_by(user_id=user_id).all()
     solved_list = [p[0] for p in solved_problems]
     return jsonify({'solved': solved_list})
 
@@ -179,6 +177,17 @@ def reset_db_command():
     db.drop_all()
     db.create_all()
     print('Database has been reset.')
+
+@app.cli.command('clear-leaderboard')
+def clear_leaderboard_command():
+    """Clears all entries from the Submission table, resetting the leaderboard."""
+    try:
+        num_rows_deleted = db.session.query(Submission).delete()
+        db.session.commit()
+        print(f'Leaderboard has been cleared. Deleted {num_rows_deleted} submission(s).')
+    except Exception as e:
+        db.session.rollback()
+        print(f'An error occurred: {e}')
 
 def _get_ext(language):
     return {'python': 'py', 'c': 'c', 'java': 'java'}.get(language, '')
