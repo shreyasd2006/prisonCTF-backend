@@ -2,11 +2,13 @@ import subprocess
 import os
 import uuid
 import shutil
+import time
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+import javalang # For parsing Java class names
 
 app = Flask(__name__)
 CORS(app)
@@ -18,7 +20,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# --- Database Models ---
+# --- Database Models (Updated) ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -36,55 +38,76 @@ class Submission(db.Model):
     problem_num = db.Column(db.Integer, nullable=False)
     language = db.Column(db.String(20), nullable=False)
     submitted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    score = db.Column(db.Integer, nullable=False, default=0) # New: Number of test cases passed
+    time_taken = db.Column(db.Float, nullable=False, default=0.0) # New: Execution time
     
     user = db.relationship('User', backref=db.backref('submissions', lazy=True))
 
-# --- Secure Code Runner ---
+# --- Secure Code Runner (Updated) ---
 def run_code_with_subprocess(user_code, language, problem_num):
-    unique_id = str(uuid.uuid4())
-    temp_dir = os.path.join('/tmp', unique_id)
+    unique_id, temp_dir = str(uuid.uuid4()), None
     try:
+        temp_dir = os.path.join('/tmp', unique_id)
         os.makedirs(temp_dir, exist_ok=True)
-        problem_dir_source = f'problems/problem {problem_num}'
-        solution_filename = os.path.join(temp_dir, f'solution.{_get_ext(language)}')
-        test_case_source = f'{problem_dir_source}/test_cases.{_get_ext(language)}'
-        test_case_dest = os.path.join(temp_dir, f'test_cases.{_get_ext(language)}')
         
-        if not os.path.exists(problem_dir_source) or not os.path.exists(test_case_source):
-            return {'success': False, 'message': f'Problem {problem_num} files not found on server.'}
+        problem_dir_source = f'problems/problem {problem_num}'
+        ext = _get_ext(language)
+        solution_filename = os.path.join(temp_dir, f'solution.{ext}')
+        test_case_source = f'{problem_dir_source}/test_cases.{ext}'
+        test_case_dest = os.path.join(temp_dir, f'test_cases.{ext}')
+
+        if not os.path.exists(test_case_source):
+            return {'success': False, 'message': f'Test cases for Problem {problem_num} ({language}) not found.'}
 
         with open(solution_filename, 'w') as f: f.write(user_code)
         shutil.copy(test_case_source, test_case_dest)
 
+        command = []
         if language == 'python':
             command = ['python3', test_case_dest]
         elif language == 'c':
             executable_path = os.path.join(temp_dir, 'a.out')
             compile_proc = subprocess.run(['gcc', test_case_dest, solution_filename, '-o', executable_path], capture_output=True, text=True, timeout=10)
-            if compile_proc.returncode != 0: return {'success': False, 'message': 'Compilation Failed', 'output': compile_proc.stderr}
+            if compile_proc.returncode != 0: return {'success': False, 'score': 0, 'message': 'Compilation Failed', 'output': compile_proc.stderr}
             command = [executable_path]
-        else:
-            return {'success': False, 'message': f'Language "{language}" not supported.'}
+        elif language == 'java':
+            class_name = _get_java_class_name(user_code) or 'solution'
+            if not class_name: return {'success': False, 'score': 0, 'message': 'Could not determine public class name in Java code.'}
+            
+            # Rename solution.java to the actual class name to avoid compilation errors
+            actual_solution_path = os.path.join(temp_dir, f'{class_name}.java')
+            os.rename(solution_filename, actual_solution_path)
 
-        result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+            compile_proc = subprocess.run(['javac', test_case_dest, actual_solution_path], capture_output=True, text=True, timeout=15)
+            if compile_proc.returncode != 0: return {'success': False, 'score': 0, 'message': 'Compilation Failed', 'output': compile_proc.stderr}
+            command = ['java', '-cp', temp_dir, 'test_cases']
+
+        start_time = time.time()
+        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        end_time = time.time()
         
-        if result.returncode == 0: return {'success': True}
-        else: return {'success': False, 'message': 'Tests Failed', 'output': result.stdout + result.stderr}
+        output = result.stdout + result.stderr
+        score = output.upper().count('PASS:')
+        time_taken = round(end_time - start_time, 4)
+
+        if result.returncode == 0:
+            return {'success': True, 'score': score, 'time_taken': time_taken, 'message': f'All tests passed! ({score} cases)'}
+        else:
+            return {'success': False, 'score': score, 'time_taken': time_taken, 'message': f'Tests failed. ({score} cases passed)', 'output': output}
 
     except subprocess.TimeoutExpired:
-        return {'success': False, 'message': 'Execution timed out.'}
+        return {'success': False, 'score': 0, 'message': 'Execution timed out.'}
     except Exception as e:
-        return {'success': False, 'message': f'Server execution error: {str(e)}'}
+        return {'success': False, 'score': 0, 'message': f'Server execution error: {str(e)}'}
     finally:
-        if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
+        if temp_dir and os.path.exists(temp_dir): shutil.rmtree(temp_dir)
 
-# --- API Endpoints ---
+# --- API Endpoints (Updated) ---
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
     if User.query.filter_by(username=data['username']).first():
         return jsonify({'message': 'Username already exists'}), 409
-    
     new_user = User(username=data['username'])
     new_user.set_password(data['password'])
     db.session.add(new_user)
@@ -108,37 +131,63 @@ def validate_solution():
     if Submission.query.filter_by(user_id=user_id, problem_num=problem_num).first():
         return jsonify({'success': False, 'message': 'Problem already solved.'})
 
-    # CRITICAL SECURITY NOTE: For a high-stakes competition, replace this with a Docker-based runner.
     result = run_code_with_subprocess(data['code'], data['language'], problem_num)
     
     if result.get('success'):
-        new_submission = Submission(user_id=user_id, problem_num=problem_num, language=data['language'])
+        new_submission = Submission(
+            user_id=user_id, 
+            problem_num=problem_num, 
+            language=data['language'],
+            score=result.get('score', 0),
+            time_taken=result.get('time_taken', 0.0)
+        )
         db.session.add(new_submission)
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Correct!'})
-    else:
-        return jsonify(result), 200
+    return jsonify(result), 200
 
 @app.route('/leaderboard', methods=['GET'])
 def leaderboard():
-    users_by_score = db.session.query(
+    # Sum scores and time for each user, then rank by score DESC, then time ASC
+    leaderboard_query = db.session.query(
         User.username,
-        db.func.count(Submission.problem_num).label('score')
-    ).join(Submission).group_by(User.username).order_by(db.desc('score')).all()
-    leaderboard_data = [{'username': user, 'score': score} for user, score in users_by_score]
+        db.func.sum(Submission.score).label('total_score'),
+        db.func.sum(Submission.time_taken).label('total_time')
+    ).join(Submission).group_by(User.username).order_by(
+        db.desc('total_score'), 
+        db.asc('total_time')
+    ).all()
+    
+    leaderboard_data = [{'username': user, 'score': score, 'time': round(time, 4)} for user, score, time in leaderboard_query]
     return jsonify(leaderboard_data)
 
 @app.route('/user_progress/<int:user_id>', methods=['GET'])
 def user_progress(user_id):
-    solved_problems = db.session.query(Submission.problem_num).filter_by(user_id=user_id).all()
+    solved_problems = db.session.query(Submission.problem_num).filter_by(user_id=user_id, success=True).all()
     solved_list = [p[0] for p in solved_problems]
     return jsonify({'solved': solved_list})
 
-# A command to initialize the database
+# --- Helper Functions and DB Commands ---
 @app.cli.command('init-db')
 def init_db_command():
+    """Initializes the database by creating all tables."""
     db.create_all()
     print('Initialized the database.')
 
+@app.cli.command('reset-db')
+def reset_db_command():
+    """Resets the database by dropping and re-creating all tables."""
+    db.drop_all()
+    db.create_all()
+    print('Database has been reset.')
+
 def _get_ext(language):
-    return {'python': 'py', 'c': 'c'}.get(language, '')
+    return {'python': 'py', 'c': 'c', 'java': 'java'}.get(language, '')
+
+def _get_java_class_name(code):
+    try:
+        tree = javalang.parse.parse(code)
+        for _, node in tree.filter(javalang.tree.ClassDeclaration):
+            if 'public' in node.modifiers:
+                return node.name
+    except Exception:
+        return None
