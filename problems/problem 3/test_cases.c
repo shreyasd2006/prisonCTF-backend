@@ -2,13 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 char* twoSumPairs(int *arr, int n, int target);
 
 int failures = 0;
 
 void normalize(char *s) {
-
     char *lines[1000];
     int count=0;
     char *tok = strtok(s, "\n");
@@ -50,7 +48,8 @@ int main() {
     check(arr1, 5, 4, strdup("0 2\n1 3\n"));
 
     int arr2[] = {3,3,4,7,5,2};
-    check(arr2, 6, 10, strdup("1 3\n2 4\n"));
+    // ✅ changed to 0-based
+    check(arr2, 6, 10, strdup("0 3\n1 3\n"));
 
     int arr3[] = {0,0,0,0};
     check(arr3, 4, 0, strdup("0 1\n0 2\n0 3\n1 2\n1 3\n2 3\n"));
