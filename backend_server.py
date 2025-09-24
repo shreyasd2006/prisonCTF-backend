@@ -3,6 +3,7 @@ import os
 import uuid
 import shutil
 import time
+import re
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -58,7 +59,8 @@ def run_code_with_subprocess(user_code, language, problem_num):
         if not os.path.exists(test_case_source):
             return {'success': False, 'message': f'Test cases for Problem {problem_num} ({language}) not found.'}
 
-        with open(solution_filename, 'w') as f: f.write(user_code)
+        with open(solution_filename, 'w') as f:
+            f.write(user_code)
         shutil.copy(test_case_source, test_case_dest)
 
         command = []
@@ -68,32 +70,74 @@ def run_code_with_subprocess(user_code, language, problem_num):
             command = ['python3', test_case_dest]
         elif language == 'c':
             executable_path = os.path.join(temp_dir, 'a.out')
-            compile_proc = subprocess.run(['gcc', test_case_dest, solution_filename, '-o', executable_path], capture_output=True, text=True, timeout=10)
-            if compile_proc.returncode != 0: return {'success': False, 'score': 0, 'message': 'Compilation Failed', 'output': compile_proc.stderr}
+            compile_proc = subprocess.run(
+                ['gcc', test_case_dest, solution_filename, '-o', executable_path],
+                capture_output=True, text=True, timeout=10
+            )
+            if compile_proc.returncode != 0:
+                return {
+                    'success': False,
+                    'score': 0,
+                    'message': 'Compilation Failed',
+                    'output': compile_proc.stderr
+                }
             command = [executable_path]
         else:
             return {'success': False, 'message': f'Language "{language}" is not supported.'}
-
 
         start_time = time.time()
         result = subprocess.run(command, capture_output=True, text=True, timeout=execution_timeout)
         end_time = time.time()
         
         output = result.stdout + result.stderr
-        score = output.upper().count('PASS:')
         time_taken = round(end_time - start_time, 4)
 
+        score = 0
+        if language == 'python':
+            # unittest format
+            if result.returncode == 0 and "OK" in output:
+                # Try to parse "Ran X tests" line
+                match = re.search(r"Ran (\d+) test", output)
+                score = int(match.group(1)) if match else 0
+            else:
+                score = 0
+        elif language == 'c':
+            # C prints PASS for each test
+            score = output.upper().count('PASS')
+
         if result.returncode == 0:
-            return {'success': True, 'score': score, 'time_taken': time_taken, 'message': f'All tests passed! ({score} cases)'}
+            return {
+                'success': True,
+                'score': score,
+                'time_taken': time_taken,
+                'message': f'All tests passed! ({score} cases)'
+            }
         else:
-            return {'success': False, 'score': score, 'time_taken': time_taken, 'message': f'Tests failed. ({score} cases passed)', 'output': output}
+            return {
+                'success': False,
+                'score': score,
+                'time_taken': time_taken,
+                'message': f'Tests failed. ({score} cases passed)',
+                'output': output
+            }
 
     except subprocess.TimeoutExpired:
-        return {'success': False, 'score': 0, 'time_taken': execution_timeout, 'message': 'Execution timed out.', 'output': 'Your code took too long to complete.'}
+        return {
+            'success': False,
+            'score': 0,
+            'time_taken': execution_timeout,
+            'message': 'Execution timed out.',
+            'output': 'Your code took too long to complete.'
+        }
     except Exception as e:
-        return {'success': False, 'score': 0, 'message': f'Server execution error: {str(e)}'}
+        return {
+            'success': False,
+            'score': 0,
+            'message': f'Server execution error: {str(e)}'
+        }
     finally:
-        if temp_dir and os.path.exists(temp_dir): shutil.rmtree(temp_dir)
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
 
 # --- API Endpoints ---
 @app.route('/register', methods=['POST'])
@@ -119,7 +163,8 @@ def login():
 def validate_solution():
     data = request.get_json()
     user_id, problem_num = data.get('userId'), data.get('problem')
-    if not user_id: return jsonify({'message': 'Authentication required'}), 401
+    if not user_id:
+        return jsonify({'message': 'Authentication required'}), 401
 
     if Submission.query.filter_by(user_id=user_id, problem_num=problem_num).first():
         return jsonify({'success': False, 'message': 'Problem already solved.'})
@@ -149,7 +194,10 @@ def leaderboard():
         db.asc('total_time')
     ).all()
     
-    leaderboard_data = [{'username': user, 'score': score, 'time': round(time, 4)} for user, score, time in leaderboard_query]
+    leaderboard_data = [
+        {'username': user, 'score': score, 'time': round(time, 4)}
+        for user, score, time in leaderboard_query
+    ]
     return jsonify(leaderboard_data)
 
 @app.route('/user_progress/<int:user_id>', methods=['GET'])
@@ -181,6 +229,4 @@ def clear_leaderboard_command():
         print(f'An error occurred: {e}')
 
 def _get_ext(language):
-    # Reverted to only support python and c
     return {'python': 'py', 'c': 'c'}.get(language, '')
-
