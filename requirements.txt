@@ -4,4 +4,3 @@ gunicorn
 Flask-SQLAlchemy
 psycopg2-binary
 werkzeug
-javalang

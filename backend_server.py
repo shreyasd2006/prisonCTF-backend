@@ -8,7 +8,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-import javalang # For parsing Java class names
 
 app = Flask(__name__)
 CORS(app)
@@ -20,7 +19,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# --- Database Models (Updated) ---
+# --- Database Models ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -43,7 +42,7 @@ class Submission(db.Model):
     
     user = db.relationship('User', backref=db.backref('submissions', lazy=True))
 
-# --- Secure Code Runner (Updated) ---
+# --- Secure Code Runner ---
 def run_code_with_subprocess(user_code, language, problem_num):
     unique_id, temp_dir = str(uuid.uuid4()), None
     try:
@@ -63,6 +62,8 @@ def run_code_with_subprocess(user_code, language, problem_num):
         shutil.copy(test_case_source, test_case_dest)
 
         command = []
+        execution_timeout = 20
+
         if language == 'python':
             command = ['python3', test_case_dest]
         elif language == 'c':
@@ -70,19 +71,12 @@ def run_code_with_subprocess(user_code, language, problem_num):
             compile_proc = subprocess.run(['gcc', test_case_dest, solution_filename, '-o', executable_path], capture_output=True, text=True, timeout=10)
             if compile_proc.returncode != 0: return {'success': False, 'score': 0, 'message': 'Compilation Failed', 'output': compile_proc.stderr}
             command = [executable_path]
-        elif language == 'java':
-            class_name = _get_java_class_name(user_code) or 'solution'
-            if not class_name: return {'success': False, 'score': 0, 'message': 'Could not determine public class name in Java code.'}
-            
-            actual_solution_path = os.path.join(temp_dir, f'{class_name}.java')
-            os.rename(solution_filename, actual_solution_path)
+        else:
+            return {'success': False, 'message': f'Language "{language}" is not supported.'}
 
-            compile_proc = subprocess.run(['javac', test_case_dest, actual_solution_path], capture_output=True, text=True, timeout=15)
-            if compile_proc.returncode != 0: return {'success': False, 'score': 0, 'message': 'Compilation Failed', 'output': compile_proc.stderr}
-            command = ['java', '-cp', temp_dir, 'test_cases']
 
         start_time = time.time()
-        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=execution_timeout)
         end_time = time.time()
         
         output = result.stdout + result.stderr
@@ -95,13 +89,13 @@ def run_code_with_subprocess(user_code, language, problem_num):
             return {'success': False, 'score': score, 'time_taken': time_taken, 'message': f'Tests failed. ({score} cases passed)', 'output': output}
 
     except subprocess.TimeoutExpired:
-        return {'success': False, 'score': 0, 'message': 'Execution timed out.'}
+        return {'success': False, 'score': 0, 'time_taken': execution_timeout, 'message': 'Execution timed out.', 'output': 'Your code took too long to complete.'}
     except Exception as e:
         return {'success': False, 'score': 0, 'message': f'Server execution error: {str(e)}'}
     finally:
         if temp_dir and os.path.exists(temp_dir): shutil.rmtree(temp_dir)
 
-# --- API Endpoints (Updated) ---
+# --- API Endpoints ---
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -167,20 +161,17 @@ def user_progress(user_id):
 # --- Helper Functions and DB Commands ---
 @app.cli.command('init-db')
 def init_db_command():
-    """Initializes the database by creating all tables."""
     db.create_all()
     print('Initialized the database.')
 
 @app.cli.command('reset-db')
 def reset_db_command():
-    """Resets the database by dropping and re-creating all tables."""
     db.drop_all()
     db.create_all()
     print('Database has been reset.')
 
 @app.cli.command('clear-leaderboard')
 def clear_leaderboard_command():
-    """Clears all entries from the Submission table, resetting the leaderboard."""
     try:
         num_rows_deleted = db.session.query(Submission).delete()
         db.session.commit()
@@ -190,13 +181,6 @@ def clear_leaderboard_command():
         print(f'An error occurred: {e}')
 
 def _get_ext(language):
-    return {'python': 'py', 'c': 'c', 'java': 'java'}.get(language, '')
+    # Reverted to only support python and c
+    return {'python': 'py', 'c': 'c'}.get(language, '')
 
-def _get_java_class_name(code):
-    try:
-        tree = javalang.parse.parse(code)
-        for _, node in tree.filter(javalang.tree.ClassDeclaration):
-            if 'public' in node.modifiers:
-                return node.name
-    except Exception:
-        return None
