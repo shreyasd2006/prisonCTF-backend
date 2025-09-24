@@ -15,12 +15,24 @@ class TestQ4(unittest.TestCase):
         return result.stdout.strip()
 
     def test_samples(self):
-        self.assertEqual(self.run_solution("3 3\n1 2 3\n4 5 6\n7 8 9\n"), "29")
+        # Sample from PDF
+        self.assertEqual(
+            self.run_solution("3 3\n1 2 3\n4 5 6\n7 8 9\n"), "29"
+        )
 
     def test_hidden(self):
-        self.assertEqual(self.run_solution("2 2\n-1 2\n1 3\n"), "4")
-        self.assertEqual(self.run_solution("3 4\n1 2 3 4\n2 2 1 1\n5 1 1 1\n"), "11")
-        self.assertEqual(self.run_solution("4 4\n1 1 1 1\n1 1 1 1\n1 1 1 1\n1 1 1 9\n"), "15")
+        # Hidden test 1
+        self.assertEqual(
+            self.run_solution("2 2\n-1 2\n1 3\n"), "4"
+        )
+        # Hidden test 2 (PDF said 11, but true max is 12 ✅)
+        self.assertEqual(
+            self.run_solution("3 4\n1 2 3 4\n2 2 1 1\n5 1 1 1\n"), "12"
+        )
+        # Hidden test 3
+        self.assertEqual(
+            self.run_solution("4 4\n1 1 1 1\n1 1 1 1\n1 1 1 1\n1 1 1 9\n"), "15"
+        )
 
 if __name__ == "__main__":
     unittest.main()
