@@ -1,5 +1,5 @@
 #include <stdio.h>
-char* encrypt(char *s) {
+char* encryptString(char *s) {
     //Implement logic here.
     return s; // placeholder
 }
