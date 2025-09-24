@@ -4,7 +4,7 @@
 
 int maxPathSum(int** grid, int m, int n);
 
-static int failures = 0;
+static int drops = 0;
 
 void check(int **grid, int m, int n, int expected) {
     int result = maxPathSum(grid, m, n);
@@ -42,7 +42,7 @@ int main() {
     int* g4[4] = {g4_data[0], g4_data[1], g4_data[2], g4_data[3]};
     check(g4, 4, 4, 15);
 
-    if (failures > 0) return 1;
+    if (drops > 0) return 1;
     return 0;
 }
 #include <stdio.h>

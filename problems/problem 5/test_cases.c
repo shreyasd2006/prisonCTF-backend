@@ -20,8 +20,8 @@ void check(const char* input, const char* expected) {
 int main() {
     check("hello123", "ihmmr321");
     check("programming2025!", "qsrhsdnnloh5202!"); // fixed
-    check("AeiOu", "DhLpRx");
-    check("testCASE123", "uftuDBTF321");
+    check("AeiOu", "DhlRx");
+    check("testCASE123", "uhtuDDTH321");
 
     if (failures > 0) return 1;
     return 0;
