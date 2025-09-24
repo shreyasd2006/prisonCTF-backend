@@ -17,7 +17,7 @@ class TestQ7(unittest.TestCase):
     def test_hidden(self):
         self.assertEqual(self.run_solution("listen silent\n"), "True")
         self.assertEqual(self.run_solution("triangle integral\n"), "True")
-        self.assertEqual(self.run_solution("apple paple\n"), "False")
+        self.assertEqual(self.run_solution("apple papple\n"), "False")
 
 if __name__ == "__main__":
     unittest.main()
