@@ -4,7 +4,7 @@
 
 char* longestCommonPrefix(char **strs, int n);
 
-int failures = 0;
+static int failures = 0;
 
 void check(char *arr[], int n, char *expected) {
     char *output = longestCommonPrefix(arr, n);

@@ -4,7 +4,7 @@
 
 int maxPathSum(int** grid, int m, int n);
 
-int failures = 0;
+static int failures = 0;
 
 void check(int **grid, int m, int n, int expected) {
     int result = maxPathSum(grid, m, n);

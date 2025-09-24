@@ -5,7 +5,7 @@
 
 char* firstNonRepeating(char *s);
 
-int failures = 0;
+static int failures = 0;
 
 void check(char *input, char *expected) {
     char *output = firstNonRepeating(input);

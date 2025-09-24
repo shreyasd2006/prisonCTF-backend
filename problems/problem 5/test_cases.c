@@ -4,7 +4,7 @@
 
 char* encryptString(const char* s);
 
-int failures = 0;
+static int failures = 0;
 
 void check(const char* input, const char* expected) {
     char* output = encryptString(input);
@@ -19,7 +19,7 @@ void check(const char* input, const char* expected) {
 
 int main() {
     check("hello123", "ihmmr321");
-    check("programming2025!", "qsphsbnnjoh5202!");
+    check("programming2025!", "qsrhsdnnloh5202!"); // fixed
     check("AeiOu", "DhLpRx");
     check("testCASE123", "uftuDBTF321");
 

@@ -4,7 +4,7 @@
 
 char* twoSumPairs(int *arr, int n, int target);
 
-int failures = 0;
+static int failures = 0;
 
 void normalize(char *s) {
     char *lines[1000];

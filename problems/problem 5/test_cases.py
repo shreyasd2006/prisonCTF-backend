@@ -18,9 +18,11 @@ class TestQ5(unittest.TestCase):
         self.assertEqual(self.run_solution("hello123\n"), "ihmmr321")
 
     def test_hidden(self):
-        self.assertEqual(self.run_solution("programming2025!\n"), "qsphsbnnjoh5202!")
+    # Corrected according to vowel +3, consonant +1
+        self.assertEqual(self.run_solution("programming2025!\n"), "qsrhsdnnloh5202!")
         self.assertEqual(self.run_solution("AeiOu\n"), "DhLpRx")
         self.assertEqual(self.run_solution("testCASE123\n"), "uftuDBTF321")
+
 
 if __name__ == "__main__":
     unittest.main()
