@@ -17,4 +17,4 @@ Constraints:
 
 Sample:
 Input: hello123
-Output: igopt321
+Output: ihmmr321

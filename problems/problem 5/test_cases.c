@@ -1,15 +1,14 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
+char* encryptString(const char* s);
 
-char* encrypt(char *s);
+int failures = 0;
 
-int failures=0;
-
-void check(char *input, char *expected) {
-    char *output = encrypt(input);
-    if (strcmp(output, expected)==0) {
+void check(const char* input, const char* expected) {
+    char* output = encryptString(input);
+    if (strcmp(output, expected) == 0) {
         printf("PASS\n");
     } else {
         printf("FAIL Input=%s Expected=%s Got=%s\n", input, expected, output);
@@ -19,11 +18,11 @@ void check(char *input, char *expected) {
 }
 
 int main() {
-    check("hello123","igopt321");
-    check("programming2025!","qsphsbnnjoh5202!");
-    check("AeiOu","DhpRx");
-    check("testCASE123","uftuDBTF321");
+    check("hello123", "ihmmr321");
+    check("programming2025!", "qsphsbnnjoh5202!");
+    check("AeiOu", "DhLpRx");
+    check("testCASE123", "uftuDBTF321");
 
-    if (failures>0) return 1;
+    if (failures > 0) return 1;
     return 0;
 }
